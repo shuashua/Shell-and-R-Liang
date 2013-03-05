@@ -1,0 +1,180 @@
+{\rtf1\ansi\ansicpg1252\cocoartf1138\cocoasubrtf510
+{\fonttbl\f0\fswiss\fcharset0 Helvetica;\f1\fswiss\fcharset0 ArialMT;\f2\fnil\fcharset0 Monaco;
+\f3\fmodern\fcharset0 Courier;}
+{\colortbl;\red255\green255\blue255;\red26\green26\blue26;\red2\green26\blue128;}
+\margl1440\margr1440\vieww10800\viewh8400\viewkind0
+\pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardirnatural
+
+\f0\fs24 \cf0 ### IN THE SHELL:\
+LC_ALL=C cut -f17 -d',' *.csv | egrep 'LAX | SFO | SMF | OAK' | sort | uniq -c\
+LC_ALL=C cut -f 15,17 -d',' 2001.csv |egrep 'LAX | SFO | SMF | OAK' > 2001stemp.csv\
+LC_ALL=C cut -f 15,17 -d',' 2002.csv |egrep 'LAX | SFO | SMF | OAK' > 2002temp.csv\
+LC_ALL=C cut -f 15,17 -d',' \{1987..2000\}.csv |egrep 'LAX | SFO | SMF | OAK' > early.csv\
+LC_ALL=C cut -f 15,17 -d',' \{2003..2008\}.csv |egrep 'LAX | SFO | SMF | OAK' > filter.csv\
+\
+#### Combine .csv files in Shell:\
+\pard\pardeftab720
+
+\f1\fs26 \cf2 FIRST=\
+for FILE in 2001stemp.csv 2002temp.csv early.csv filter.csv\
+do\
+\'a0 \'a0 \'a0 \'a0 exec 5<"$FILE" # Open file\
+\'a0 \'a0 \'a0 \'a0 read LINE <&5 # Read first line\
+\'a0 \'a0 \'a0 \'a0 [ -z "$FIRST" ] && echo "$LINE" # Print it only from first file\
+\'a0 \'a0 \'a0 \'a0 FIRST="no"\
+\
+\'a0 \'a0 \'a0 \'a0 cat <&5 # Print the rest directly to standard output\
+\'a0 \'a0 \'a0 \'a0 exec 5<&- # Close file\
+\'a0 \'a0 \'a0 \'a0 # Redirect stdout for this section into file.out\
+done > file.csv\
+\pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardirnatural
+
+\f0\fs24 \cf0 \
+\
+### IN R:\
+system.time()\
+\
+Split Data Frame:\
+sep.data = split(data, data$Origin)\
+\
+Mu Calculation: \
+all.mu = sapply(1:length(sep.data), function(i) mean(sep.data[[i]]$ArrDelay, na.rm=TRUE))\
+\
+Sd Calculation:\
+all.sd = sapply(1:length(sep.data), function(i) sd(sep.data[[i]]$ArrDelay))\
+\
+### 1. Database:\
+\
+library(DBI)\
+library(RSQLite)\
+\
+drv <- dbDriver("SQLite")\
+con <- dbConnect(drv, "delays.db")\
+data <- sqliteQuickSQL(con, "select Origin, ArrDelay from delays where Origin='SFO' or Origin='LAX' or Origin='SMF' or Origin='OAK'", bind.data=NULL)\
+\
+###Ans:\
+#all.mu\
+#[1] 5.892965 5.007034 7.774897 5.299447\
+\
+### all.sd\
+#[1] 27.05606 21.92210 29.97188 24.96255\
+\
+###2. Shell:\
+\
+counts = system("LC_ALL=C cut -f17 -d',' *.csv | egrep 'LAX|SFO|SMF|OAK' | sort | uniq -c", intern=TRUE)\
+\
+###Ans:\
+###counts\
+#[1] "4057452 LAX" "1151897 OAK" "2711958 SFO" "806133 SMF" \
+\
+system("LC_ALL=C cut -f 7,17 -d',' *.csv | egrep 'LAX | SFO | SMF | OAK' > filter.csv", intern=TRUE)\
+\
+data = read.csv("file.csv",header=FALSE)\
+names(data) = c("ArrDelay","Origin")\
+data$ArrDelay = as.numeric(as.character(data$ArrDelay))\
+\
+### Ans:\
+###all.sd\
+#[1] 27.36568 22.03457 30.35535 25.14183\
+\
+###all.mu\
+#[1] 6.276653 5.095424 8.228922 5.451920\
+\
+\
+###3. Connection:\
+\pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardirnatural
+
+\f1\fs26 \cf2 \
+\pard\pardeftab720
+\cf2 a = pipe("cut -f 15,17 -d',' \{1987..2008\}.csv")\
+k = readLines(a)\
+\pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardirnatural
+
+\f0\fs24 \cf2 more = pipe("LC_ALL=C cut -f 15,17 -d',' \{2001..2002\}.csv")\cf0 \
+g = readLines(more)\
+all = c(g,k)\
+all = all[which(all != "ArrDelay,Origin")]\
+raw.data = grep('SFO|LAX|SMF|OAK', all)\
+rawData = all[raw.data]\
+data.mat = do.call('rbind', strsplit(rawData, ','))\
+data = as.data.frame(data.mat)\
+names(data) = c("ArrDelay","Origin")\
+data$ArrDelay = as.numeric(as.character(data$ArrDelay))\
+\
+###Ans:\
+###all.mu\
+#[1] 6.007046 5.073360 7.951510 5.359327\
+\
+###all.sd\
+#[1] 27.30415 22.05919 30.28721 25.09679\
+\
+\
+###IN SQLite:\
+\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\tx7280\tx7840\tx8400\tx8960\tx9520\tx10080\tx10640\tx11200\tx11760\tx12320\tx12880\tx13440\tx14000\tx14560\tx15120\tx15680\tx16240\tx16800\tx17360\tx17920\tx18480\tx19040\tx19600\tx20160\tx20720\tx21280\tx21840\tx22400\tx22960\tx23520\tx24080\tx24640\tx25200\tx25760\tx26320\tx26880\tx27440\tx28000\tx28560\tx29120\tx29680\tx30240\tx30800\tx31360\tx31920\tx32480\tx33040\tx33600\tx34160\tx34720\tx35280\tx35840\li80\fi-80\pardirnatural
+
+\f2 \cf0 sqlite3 \cf3 -\cf0 separator \cf3 ,\cf0  delays.db\
+\pard\pardeftab720
+
+\f3 \cf0 create table delays (\
+  Year int,\
+  Month int,\
+  DayofMonth int,\
+  DayOfWeek int,\
+  DepTime  int,\
+  CRSDepTime int,\
+  ArrTime int,\
+  CRSArrTime int,\
+  UniqueCarrier varchar(5),\
+  FlightNum int,\
+  TailNum varchar(8),\
+  ActualElapsedTime int,\
+  CRSElapsedTime int,\
+  AirTime int,\
+  ArrDelay int,\
+  DepDelay int,\
+  Origin varchar(3),\
+  Dest varchar(3),\
+  Distance int,\
+  TaxiIn int,\
+  TaxiOut int,\
+  Cancelled int,\
+  CancellationCode varchar(1),\
+  Diverted varchar(1),\
+  CarrierDelay int,\
+  WeatherDelay int,\
+  NASDelay int,\
+  SecurityDelay int,\
+  LateAircraftDelay int\
+);\
+\
+.separator ,\
+.import 1987.csv delays\
+.import 1988.csv delays\
+.import 1989.csv delays\
+.import 1990.csv delays\
+.import 1991.csv delays\
+.import 1992.csv delays\
+.import 1993.csv delays\
+.import 1994.csv delays\
+.import 1995.csv delays\
+.import 1996.csv delays\
+.import 1997.csv delays\
+.import 1998.csv delays\
+.import 1999.csv delays\
+.import 2000.csv delays\
+.import 2001.csv delays\
+.import 2002.csv delays\
+.import 2003.csv delays\
+.import 2004.csv delays\
+.import 2005.csv delays\
+.import 2006.csv delays\
+.import 2007.csv delays\
+.import 2008.csv delays\
+\
+.table\
+.quit\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\tx7280\tx7840\tx8400\tx8960\tx9520\tx10080\tx10640\tx11200\tx11760\tx12320\tx12880\tx13440\tx14000\tx14560\tx15120\tx15680\tx16240\tx16800\tx17360\tx17920\tx18480\tx19040\tx19600\tx20160\tx20720\tx21280\tx21840\tx22400\tx22960\tx23520\tx24080\tx24640\tx25200\tx25760\tx26320\tx26880\tx27440\tx28000\tx28560\tx29120\tx29680\tx30240\tx30800\tx31360\tx31920\tx32480\tx33040\tx33600\tx34160\tx34720\tx35280\tx35840\li80\fi-80\pardirnatural
+
+\f0 \cf0 \
+}
